@@ -1,0 +1,71 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "dist/server.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/stories/(.*)",
+      "dest": "api/stories.ts"
+    },
+    {
+      "src": "/api/cleanup",
+      "dest": "api/cleanup.ts"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "dist/server.js"
+    },
+    {
+      "src": "/expand-story",
+      "dest": "dist/server.js"
+    },
+    {
+      "src": "/generate-(.*)",
+      "dest": "dist/server.js"
+    },
+    {
+      "src": "/knowledge-stats",
+      "dest": "dist/server.js"
+    },
+    {
+      "src": "/test-(.*)",
+      "dest": "dist/server.js"
+    },
+    {
+      "src": "/health",
+      "dest": "dist/server.js"
+    },
+    {
+      "src": "/public/(.*)",
+      "dest": "public/$1"
+    },
+    {
+      "src": "/(.*\\.(js|css|png|jpg|jpeg|gif|ico|svg|mp3|mp4|woff|woff2|ttf|eot))",
+      "dest": "public/$1"
+    },
+    {
+      "src": "/",
+      "dest": "dist/server.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "public/index.html"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "dist/server.js": {
+      "maxDuration": 300
+    }
+  }
+} 

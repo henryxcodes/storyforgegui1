@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StoryForge GUI - AI Story Generator</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Interactive Background Animation -->
+    <div class="bg-animation" id="bgAnimation"></div>
+    
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">
+                    <i class="fas fa-book-open"></i>
+                    StoryForge GUI
+                </h1>
+                <nav class="main-nav">
+                    <ul class="nav-links">
+                        <li><button class="nav-link" data-step="1">Story Input</button></li>
+                        <li><button class="nav-link" data-step="2">Prompt Editor</button></li>
+                        <li><button class="nav-link" data-step="3">Story Editor</button></li>
+                        <li><button class="nav-link" data-step="4">Voiceover</button></li>
+                        <li><button class="nav-link" data-step="5">Results</button></li>
+                        <li><button class="nav-link" data-step="6">Story Database</button></li>
+                    </ul>
+                </nav>
+                <p class="tagline">AI-Powered Story Generation with RAG Knowledge Base</p>
+            </div>
+            <!-- Knowledge stats removed from header -->
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Step 1: Story Prompt -->
+            <section class="step-section active" id="step1">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <h2>Enter Your Story Prompt</h2>
+                    <p>Describe the story you want to generate. The AI will use the knowledge base to create a compelling narrative.</p>
+                </div>
+                
+                <div class="input-section">
+                    <!-- Current Prompt Style Indicator -->
+                    <div class="current-prompt-indicator">
+                        <div class="prompt-style-info">
+                            <i class="fas fa-user-cog"></i>
+                            <span>Current Prompt Style: <strong id="currentPromptStyleName">Default Profile</strong></span>
+                            <button class="btn btn-outline btn-sm" id="changeStyleBtn">
+                                <i class="fas fa-edit"></i>
+                                Change Style
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="textarea-wrapper">
+                        <textarea 
+                            id="storyPrompt" 
+                            placeholder="Enter your story prompt here... (e.g., 'A story about revenge against a cheating partner')"
+                            rows="4"
+                        ></textarea>
+                        <div class="char-counter">
+                            <span id="promptCharCount">0</span> characters
+                        </div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" id="goToPromptEditorBtn">
+                            <i class="fas fa-code"></i>
+                            Edit Prompt
+                        </button>
+                        <button class="btn btn-primary" id="generateStoryBtn">
+                            <i class="fas fa-magic"></i>
+                            Generate Story
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 2: Prompt Editor -->
+            <section class="step-section" id="step2">
+                <div class="step-header">
+                    <div class="step-number">2</div>
+                    <h2>AI Prompt Editor</h2>
+                    <p>Customize the full AI prompt used for story generation. Create and manage prompt profiles for different use cases.</p>
+                </div>
+                
+                <div class="prompt-editor-section">
+                    <div class="prompt-meta">
+                        <div class="meta-item">
+                            <i class="fas fa-code"></i>
+                            <span id="promptLength">0 characters</span>
+                        </div>
+                        <div class="meta-item">
+                            <i class="fas fa-brain"></i>
+                            <span>RAG Context: Active</span>
+                        </div>
+                        <div class="meta-item">
+                            <i class="fas fa-user-cog"></i>
+                            <span>Profile: <span id="currentProfileName">Default</span></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Simple Prompt Editor -->
+                    <div class="prompt-editor">
+                        <div class="prompt-header">
+                            <h3><i class="fas fa-edit"></i> AI Story Prompt</h3>
+                            <p>Edit the AI prompt below. Use {{STORY_PROMPT}} as placeholder for your story input.</p>
+                        </div>
+                        
+                        <div class="prompt-section">
+                            <textarea 
+                                id="fullPromptEditor" 
+                                placeholder="Your comprehensive story prompt will load here automatically..."
+                                rows="25"
+                            ></textarea>
+                        </div>
+                        
+                        <div class="prompt-actions">
+                            <button class="btn btn-outline" id="copyPromptBtn">
+                                <i class="fas fa-copy"></i>
+                                Copy Prompt
+                            </button>
+                            <button class="btn btn-primary" id="savePromptBtn">
+                                <i class="fas fa-save"></i>
+                                Save Prompt
+                            </button>
+                        </div>
+                        
+                        <div class="prompt-info">
+                            <div class="info-item">
+                                <i class="fas fa-info-circle"></i>
+                                <span id="promptLength">0 characters</span>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-database"></i>
+                                <span>RAG Context: Active</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary" id="backToInputBtn">
+                            <i class="fas fa-arrow-left"></i>
+                            Back to Input
+                        </button>
+                        <button class="btn btn-primary" id="goToStoryEditorBtn">
+                            <i class="fas fa-edit"></i>
+                            Continue to Story Editor
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 3: Story Review & Edit -->
+            <section class="step-section" id="step3">
+                <div class="step-header">
+                    <div class="step-number">3</div>
+                    <h2>Review & Edit Generated Story</h2>
+                    <p>Review the generated story and make any edits before proceeding to voiceover generation.</p>
+                </div>
+                
+                <div class="story-section">
+                    <div class="story-meta">
+                        <div class="meta-item">
+                            <i class="fas fa-align-left"></i>
+                            <span id="storyWordCount">0 words</span>
+                        </div>
+                        <div class="meta-item">
+                            <i class="fas fa-clock"></i>
+                            <span id="storyReadTime">0 min read</span>
+                        </div>
+                        <div class="meta-item">
+                            <i class="fas fa-microphone"></i>
+                            <span id="storyAudioTime">~0 min audio</span>
+                        </div>
+                    </div>
+                    
+                    <div class="story-editor">
+                        <div class="editor-toolbar">
+                            <button class="toolbar-btn" id="undoBtn" title="Undo" disabled>
+                                <i class="fas fa-undo"></i>
+                            </button>
+                            <button class="toolbar-btn" id="redoBtn" title="Redo" disabled>
+                                <i class="fas fa-redo"></i>
+                            </button>
+                            <button class="toolbar-btn" id="resetBtn" title="Reset to Original">
+                                <i class="fas fa-refresh"></i>
+                            </button>
+                            <button class="toolbar-btn" id="copyBtn" title="Copy to Clipboard">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        
+                        <textarea 
+                            id="storyEditor" 
+                            placeholder="Your generated story will appear here..."
+                            rows="20"
+                        ></textarea>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary" id="backToPromptBtn">
+                            <i class="fas fa-arrow-left"></i>
+                            Back to Prompt Editor
+                        </button>
+                        <button class="btn btn-danger" id="clearStoryBtn">
+                            <i class="fas fa-trash"></i>
+                            Clear Story
+                        </button>
+                        <button class="btn btn-primary" id="saveStoryBtn">
+                            <i class="fas fa-save"></i>
+                            Save Story
+                        </button>
+                        <button class="btn btn-primary" id="goToVoiceoverBtn">
+                            <i class="fas fa-microphone"></i>
+                            Go to Voiceover
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 4: Voiceover Generation -->
+            <section class="step-section" id="step4">
+                <div class="step-header">
+                    <div class="step-number">4</div>
+                    <h2>Generate Voiceover</h2>
+                    <p>Choose your voiceover options and generate audio files.</p>
+                </div>
+                
+                <div class="voiceover-section">
+                    <!-- API Key Configuration -->
+                    <div class="api-keys-section">
+                        <h3>🔑 API Key Configuration</h3>
+                        <p class="api-keys-description">Enter your API keys to generate voiceovers. Keys are stored securely for this session only.</p>
+                        
+                        <div class="api-key-inputs">
+                            <div class="api-key-group">
+                                <label for="anthropicKey">
+                                    <i class="fas fa-robot"></i>
+                                    Anthropic API Key (for story generation):
+                                </label>
+                                <div class="input-group">
+                                    <input type="password" id="anthropicKey" placeholder="sk-ant-api03-..." class="api-key-input">
+                                    <button type="button" class="btn btn-outline toggle-visibility" data-target="anthropicKey">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="api-key-group">
+                                <label for="elevenlabsKey">
+                                    <i class="fas fa-microphone"></i>
+                                    ElevenLabs API Key (for premium voiceover):
+                                </label>
+                                <div class="input-group">
+                                    <input type="password" id="elevenlabsKey" placeholder="sk_..." class="api-key-input">
+                                    <button type="button" class="btn btn-outline toggle-visibility" data-target="elevenlabsKey">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="api-key-group">
+                                <label for="fishKey">
+                                    <i class="fas fa-fish"></i>
+                                    Fish Audio API Key (for full story voiceover):
+                                </label>
+                                <div class="input-group">
+                                    <input type="password" id="fishKey" placeholder="c844305..." class="api-key-input">
+                                    <button type="button" class="btn btn-outline toggle-visibility" data-target="fishKey">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="api-key-actions">
+                            <button id="validateKeysBtn" class="btn btn-accent">
+                                <i class="fas fa-check"></i>
+                                Validate API Keys
+                            </button>
+                            <button id="clearKeysBtn" class="btn btn-outline">
+                                <i class="fas fa-trash"></i>
+                                Clear All Keys
+                            </button>
+                        </div>
+                        
+                        <div id="apiKeyStatus" class="api-key-status"></div>
+                    </div>
+                    
+                    <div class="voiceover-options">
+                        <div class="option-group">
+                            <h3>Voiceover Provider</h3>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="voiceProvider" value="both" checked>
+                                    <span class="radio-custom"></span>
+                                    <div class="radio-content">
+                                        <strong>Both Providers</strong>
+                                        <span>ElevenLabs (3 min) + Fish Audio (10 min) - Recommended</span>
+                                    </div>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="voiceProvider" value="elevenlabs">
+                                    <span class="radio-custom"></span>
+                                    <div class="radio-content">
+                                        <strong>ElevenLabs Only</strong>
+                                        <span>High quality, first 4000 characters (~3 min)</span>
+                                    </div>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="voiceProvider" value="fish">
+                                    <span class="radio-custom"></span>
+                                    <div class="radio-content">
+                                        <strong>Fish Audio Only</strong>
+                                        <span>Full story, longer duration (~10 min)</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="option-group">
+                            <h3>Voice Settings</h3>
+                            <div class="voice-settings">
+                                <div class="setting-row">
+                                    <div class="silence-info">
+                                        <i class="fas fa-check-circle"></i>
+                                        <span>Silence removal is always enabled for optimal audio quality</span>
+                                    </div>
+                                </div>
+                                <div class="setting-row">
+                                    <button class="btn btn-outline" id="silenceSettingsBtn">
+                                        <i class="fas fa-sliders-h"></i> Silence Cutting Settings
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Silence Settings Modal -->
+                        <div id="silenceSettingsModal" class="modal">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h2>Silence Cutting Settings</h2>
+                                    <span class="close-modal">&times;</span>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="silence-enabled-info">
+                                        <i class="fas fa-info-circle"></i>
+                                        <span>Silence removal is always enabled. You can adjust the sensitivity settings below.</span>
+                                    </div>
+                                    
+                                    <div class="settings-section">
+                                        <h4>ElevenLabs Settings</h4>
+                                        <div class="setting-row">
+                                            <label class="input-label">Silence threshold (dB):</label>
+                                            <input type="number" id="elevenLabsThreshold" min="-60" max="-20" step="1" value="-40" class="setting-input">
+                                        </div>
+                                        <div class="setting-row">
+                                            <label class="input-label">Min silence duration (ms):</label>
+                                            <input type="number" id="elevenLabsDuration" min="100" max="2000" step="50" value="500" class="setting-input">
+                                        </div>
+                                        <div class="setting-row">
+                                            <label class="input-label">Keep silence buffer (ms):</label>
+                                            <input type="number" id="elevenLabsBuffer" min="0" max="500" step="10" value="100" class="setting-input">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="settings-section">
+                                        <h4>Fish Audio Settings</h4>
+                                        <div class="setting-row">
+                                            <label class="input-label">Silence threshold (dB):</label>
+                                            <input type="number" id="fishThreshold" min="-60" max="-20" step="1" value="-40" class="setting-input">
+                                        </div>
+                                        <div class="setting-row">
+                                            <label class="input-label">Min silence duration (ms):</label>
+                                            <input type="number" id="fishDuration" min="100" max="2000" step="50" value="500" class="setting-input">
+                                        </div>
+                                        <div class="setting-row">
+                                            <label class="input-label">Keep silence buffer (ms):</label>
+                                            <input type="number" id="fishBuffer" min="0" max="500" step="10" value="100" class="setting-input">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-outline btn-sm" id="resetSettingsBtn">
+                                        <i class="fas fa-undo"></i> Reset to Default
+                                    </button>
+                                    <button class="btn btn-primary" id="saveSettingsBtn">
+                                        <i class="fas fa-save"></i> Save Settings
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary" id="backToStoryBtn">
+                            <i class="fas fa-arrow-left"></i>
+                            Back to Story
+                        </button>
+                        <div class="audio-buttons">
+                            <button class="btn btn-primary" id="generateElevenLabsBtn">
+                                <i class="fas fa-play"></i>
+                                Generate ElevenLabs
+                            </button>
+                            <button class="btn btn-primary" id="generateFishAudioBtn">
+                                <i class="fas fa-play"></i>
+                                Generate Fish Audio
+                            </button>
+                            <button class="btn btn-primary" id="generateBothBtn">
+                                <i class="fas fa-play"></i>
+                                Generate Both
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 5: Results -->
+            <section class="step-section" id="step5">
+                <div class="step-header">
+                    <div class="step-number">5</div>
+                    <h2>Generation Complete</h2>
+                    <p>Your story and voiceover have been generated successfully!</p>
+                </div>
+                
+                <div class="results-section">
+                    <div class="unified-result-container">
+                        <div class="result-content">
+                            <!-- Story Section -->
+                            <div class="story-section">
+                                <div class="section-header">
+                                    <h3><i class="fas fa-file-text"></i> Generated Story</h3>
+                                </div>
+                                <div class="story-preview" id="finalStoryPreview">
+                                    <!-- Story content will be displayed here -->
+                                </div>
+                            </div>
+                            
+                            <!-- Voiceover Section -->
+                            <div class="voiceover-section">
+                                <div class="section-header">
+                                    <h3><i class="fas fa-headphones"></i> Voiceover Audio</h3>
+                                </div>
+                                <div id="audioResults">
+                                    <!-- Audio players will be inserted here -->
+                                </div>
+                            </div>
+                            
+                            <!-- Download Actions -->
+                            <div class="download-actions">
+                                <div class="download-buttons" id="downloadButtons">
+                                    <!-- Download buttons will be inserted here -->
+                                </div>
+                            </div>
+                            
+                            <!-- Save to Database Section -->
+                            <div class="save-database-section">
+                                <div class="section-header">
+                                    <h3><i class="fas fa-database"></i> Save to Story Database</h3>
+                                </div>
+                                <div class="save-database-content">
+                                    <p class="save-description">
+                                        Save this story and its audio to your personal database for future access and organization.
+                                    </p>
+                                    <div class="save-database-actions">
+                                        <button class="btn btn-success" id="saveToStoryDatabaseBtn">
+                                            <i class="fas fa-save"></i>
+                                            Save Story & Audio
+                                        </button>
+                                        <div class="save-status" id="saveStatus">
+                                            <!-- Save status will be displayed here -->
+                                        </div>
+                                    </div>
+                                    <div class="database-info">
+                                        <small>
+                                            <i class="fas fa-info-circle"></i>
+                                            Stories are saved locally in your browser and can be accessed from the Story Database tab.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary" id="startOverBtn">
+                            <i class="fas fa-plus"></i>
+                            Start New Story
+                        </button>
+                        <button class="btn btn-outline" id="viewDatabaseBtn">
+                            <i class="fas fa-database"></i>
+                            View Story Database
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 6: Story Database -->
+            <section class="step-section" id="step6">
+                <div class="step-header">
+                    <div class="step-number">6</div>
+                    <h2>Story Database</h2>
+                    <p>Browse, manage, and organize your saved stories and voiceovers.</p>
+                </div>
+                
+                <div class="database-section">
+                    <div class="database-controls">
+                        <div class="search-box">
+                            <input type="text" id="storySearchInput" placeholder="Search stories..." class="search-input">
+                            <button class="btn btn-outline" id="refreshStoriesBtn">
+                                <i class="fas fa-sync-alt"></i>
+                                Refresh
+                            </button>
+                        </div>
+                        <div class="filter-controls">
+                            <select id="storySortSelect" class="sort-select">
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                                <option value="alphabetical">A-Z</option>
+                                <option value="word-count">Word Count</option>
+                            </select>
+                            <button class="btn btn-outline" id="clearAllStoriesBtn">
+                                <i class="fas fa-trash"></i>
+                                Clear All
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="stories-grid" id="storiesGrid">
+                        <!-- Story cards will be dynamically generated here -->
+                    </div>
+                    
+                    <div class="database-stats">
+                        <div class="stat-item">
+                            <i class="fas fa-book"></i>
+                            <span id="totalStoriesCount">0</span>
+                            <span>Stories</span>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-microphone"></i>
+                            <span id="totalAudioCount">0</span>
+                            <span>Audio Files</span>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-hdd"></i>
+                            <span id="storageUsed">0 KB</span>
+                            <span>Storage Used</span>
+                        </div>
+                    </div>
+
+                    <!-- Data Management Section -->
+                    <div class="data-management-section">
+                        <h3><i class="fas fa-cog"></i> Data Management</h3>
+                        <p>Manage your stored data and clear specific areas as needed.</p>
+                        
+                        <div class="storage-overview">
+                            <div class="storage-item">
+                                <div class="storage-info">
+                                    <h4><i class="fas fa-key"></i> API Keys</h4>
+                                    <p>Session-stored API keys (cleared on browser close)</p>
+                                    <span class="storage-size" id="apiKeysSize">0 B</span>
+                                </div>
+                                <button class="btn btn-outline btn-sm" onclick="app.clearApiKeysFromManagement()">
+                                    <i class="fas fa-trash"></i> Clear
+                                </button>
+                            </div>
+
+                            <div class="storage-item">
+                                <div class="storage-info">
+                                    <h4><i class="fas fa-file-alt"></i> Current Story</h4>
+                                    <p>Active story content, edit history, and temporary data</p>
+                                    <span class="storage-size" id="currentStorySize">0 B</span>
+                                </div>
+                                <button class="btn btn-outline btn-sm" onclick="app.clearCurrentStoryFromManagement()">
+                                    <i class="fas fa-trash"></i> Clear
+                                </button>
+                            </div>
+
+                            <div class="storage-item">
+                                <div class="storage-info">
+                                    <h4><i class="fas fa-database"></i> Saved Stories</h4>
+                                    <p>All stories saved to database (local and server)</p>
+                                    <span class="storage-size" id="savedStoriesSize">0 B</span>
+                                </div>
+                                <button class="btn btn-outline btn-sm" onclick="app.clearAllStories()">
+                                    <i class="fas fa-trash"></i> Clear All
+                                </button>
+                            </div>
+
+                            <div class="storage-item">
+                                <div class="storage-info">
+                                    <h4><i class="fas fa-volume-up"></i> Audio Data</h4>
+                                    <p>Generated audio files and temporary audio data</p>
+                                    <span class="storage-size" id="audioDataSize">0 B</span>
+                                </div>
+                                <button class="btn btn-outline btn-sm" onclick="app.clearAudioDataFromManagement()">
+                                    <i class="fas fa-trash"></i> Clear
+                                </button>
+                            </div>
+
+                            <div class="storage-item">
+                                <div class="storage-info">
+                                    <h4><i class="fas fa-edit"></i> Custom Prompts</h4>
+                                    <p>Saved custom prompts and prompt settings</p>
+                                    <span class="storage-size" id="customPromptsSize">0 B</span>
+                                </div>
+                                <button class="btn btn-outline btn-sm" onclick="app.clearCustomPromptsFromManagement()">
+                                    <i class="fas fa-trash"></i> Clear
+                                </button>
+                            </div>
+
+                            <div class="storage-item">
+                                <div class="storage-info">
+                                    <h4><i class="fas fa-cogs"></i> App Settings</h4>
+                                    <p>Audio settings, preferences, and configuration</p>
+                                    <span class="storage-size" id="appSettingsSize">0 B</span>
+                                </div>
+                                <button class="btn btn-outline btn-sm" onclick="app.clearAppSettingsFromManagement()">
+                                    <i class="fas fa-trash"></i> Clear
+                                </button>
+                            </div>
+
+                            <div class="storage-item">
+                                <div class="storage-info">
+                                    <h4><i class="fas fa-list-alt"></i> Activity Logs</h4>
+                                    <p>Client-side activity and debug logs</p>
+                                    <span class="storage-size" id="activityLogsSize">0 B</span>
+                                </div>
+                                <button class="btn btn-outline btn-sm" onclick="app.clearActivityLogsFromManagement()">
+                                    <i class="fas fa-trash"></i> Clear
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bulk-actions">
+                            <button class="btn btn-outline" onclick="app.refreshStorageInfo()">
+                                <i class="fas fa-sync-alt"></i> Refresh Storage Info
+                            </button>
+                            <button class="btn btn-danger" onclick="app.clearAllDataFromManagement()">
+                                <i class="fas fa-exclamation-triangle"></i> Clear ALL Data
+                            </button>
+                        </div>
+
+                        <div class="storage-warning">
+                            <p><i class="fas fa-info-circle"></i> <strong>Note:</strong> Clearing data is permanent and cannot be undone. API keys are stored in session storage and will be cleared automatically when you close your browser.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <h3 class="loading-title" id="loadingTitle">Processing...</h3>
+                <p class="loading-message" id="loadingMessage">Please wait while we work on your request.</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Loading Bar -->
+        <div class="bottom-loader" id="bottomLoader">
+            <div class="bottom-loader-fill" id="bottomLoaderFill"></div>
+        </div>
+        
+        <!-- Custom Notification -->
+        <div class="notification" id="notification">
+            <div class="notification-content">
+                <div class="notification-icon">
+                    <i class="fas fa-exclamation-circle"></i>
+                </div>
+                <div class="notification-message" id="notificationMessage">
+                    Error message goes here
+                </div>
+                <button class="notification-close" id="notificationClose">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

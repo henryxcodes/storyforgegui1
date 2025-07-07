@@ -1,0 +1,1508 @@
+// StoryForge GUI - Interactive Story Generation Interface
+class StoryForgeGUI {
+    constructor() {
+        this.currentStep = 1;
+        this.isGenerating = false;
+        this.originalStory = '';
+        this.storyHistory = [];
+        this.storyHistoryIndex = -1;
+        this.audioResults = {};
+        this.knowledgeStats = null;
+        this.editHistory = [];
+        this.editIndex = -1;
+        
+        // Default silence cutting settings
+        this.silenceSettings = {
+            elevenlabs: {
+                removeSilence: true,
+                threshold: -40,
+                minDuration: 500,
+                buffer: 100
+            },
+            fish: {
+                removeSilence: true,
+                threshold: -40,
+                minDuration: 500,
+                buffer: 100
+            }
+        };
+        
+        this.init();
+    }
+
+    init() {
+        this.setupEventListeners();
+        this.loadSilenceSettings();
+        this.updateSilenceSettingsUI();
+        this.setupNotifications();
+        this.setupCharacterCounters();
+        this.setupEditHistory();
+        this.initBackgroundAnimation();
+        this.loadSavedStory();
+    }
+    
+    async loadSavedStory() {
+        // Clean up expired stories first
+        this.cleanupExpiredStories();
+        
+        try {
+            // First try to load from server if we have a storyId
+            const storyId = localStorage.getItem('storyId');
+            let storyData = null;
+            
+            if (storyId && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                try {
+                    // Try to fetch from server
+                    const serverStory = await this.loadStoryFromServer(storyId);
+                    if (serverStory && serverStory.story) {
+                        storyData = typeof serverStory.story === 'string' ? 
+                            JSON.parse(serverStory.story) : serverStory.story;
+                    }
+                } catch (serverError) {
+                    console.error('Failed to load story from server:', serverError);
+                    // Fall back to local storage
+                }
+            }
+            
+            // If server load failed or we're in local development, try localStorage
+            if (!storyData) {
+                const savedStory = localStorage.getItem('savedStory');
+                if (savedStory) {
+                    storyData = JSON.parse(savedStory);
+                }
+            }
+            
+            // If we have story data from either source, use it
+            if (storyData && storyData.content && storyData.expiresAt && storyData.expiresAt > Date.now()) {
+                // Calculate time remaining before expiration
+                const hoursRemaining = Math.round((storyData.expiresAt - Date.now()) / (60 * 60 * 1000));
+                
+                // Show notification about loaded story
+                this.showNotification(`Loaded your saved story. It will expire in approximately ${hoursRemaining} hours.`);
+                
+                // If we're on the editor page, populate it
+                const editor = document.getElementById('storyEditor');
+                if (editor) {
+                    editor.value = storyData.content;
+                    this.updateStoryMeta(storyData.content);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading saved story:', error);
+            // If there's an error parsing, remove the corrupted data
+            localStorage.removeItem('savedStory');
+            localStorage.removeItem('storyId');
+        }
+    }
+    
+    async loadStoryFromServer(storyId) {
+        try {
+            // Call the Vercel API endpoint to get the story
+            const response = await fetch(`/api/stories?id=${storyId}`, {
+                method: 'GET'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            console.log('Story loaded from server:', result);
+            return result;
+        } catch (error) {
+            console.error('Failed to load story from server:', error);
+            throw error;
+        }
+    }
+    
+    setupNotifications() {
+        // Setup notification close button
+        document.getElementById('notificationClose').addEventListener('click', () => {
+            this.hideNotification();
+        });
+    }
+    
+    showNotification(message, duration = 5000) {
+        const notification = document.getElementById('notification');
+        const messageEl = document.getElementById('notificationMessage');
+        
+        // Set the message
+        messageEl.textContent = message;
+        
+        // Show the notification
+        notification.classList.add('show');
+        
+        // Auto-hide after duration
+        if (duration > 0) {
+            this.notificationTimeout = setTimeout(() => {
+                this.hideNotification();
+            }, duration);
+        }
+    }
+    
+    hideNotification() {
+        const notification = document.getElementById('notification');
+        notification.classList.remove('show');
+        
+        // Clear any existing timeout
+        if (this.notificationTimeout) {
+            clearTimeout(this.notificationTimeout);
+            this.notificationTimeout = null;
+        }
+    }
+    
+    loadSilenceSettings() {
+        // Load saved settings from localStorage if available
+        const savedSettings = localStorage.getItem('silenceSettings');
+        if (savedSettings) {
+            try {
+                this.silenceSettings = JSON.parse(savedSettings);
+                console.log('Loaded silence settings:', this.silenceSettings);
+            } catch (error) {
+                console.error('Error loading silence settings:', error);
+            }
+        }
+        
+        // Update UI with loaded settings
+        setTimeout(() => this.updateSilenceSettingsUI(), 100);
+    }
+    
+    updateSilenceSettingsUI() {
+        // Update global remove silence checkbox
+        document.getElementById('removeSilence').checked = 
+            this.silenceSettings.elevenlabs.removeSilence || this.silenceSettings.fish.removeSilence;
+            
+        // Update ElevenLabs settings
+        const elevenSettings = this.silenceSettings.elevenlabs;
+        document.getElementById('elevenLabsRemoveSilence').checked = elevenSettings.removeSilence;
+        document.getElementById('elevenLabsThreshold').value = elevenSettings.threshold;
+        document.getElementById('elevenLabsThresholdValue').textContent = elevenSettings.threshold;
+        document.getElementById('elevenLabsDuration').value = elevenSettings.minDuration;
+        document.getElementById('elevenLabsDurationValue').textContent = elevenSettings.minDuration;
+        document.getElementById('elevenLabsBuffer').value = elevenSettings.buffer;
+        document.getElementById('elevenLabsBufferValue').textContent = elevenSettings.buffer;
+        
+        // Update Fish Audio settings
+        const fishSettings = this.silenceSettings.fish;
+        document.getElementById('fishRemoveSilence').checked = fishSettings.removeSilence;
+        document.getElementById('fishThreshold').value = fishSettings.threshold;
+        document.getElementById('fishThresholdValue').textContent = fishSettings.threshold;
+        document.getElementById('fishDuration').value = fishSettings.minDuration;
+        document.getElementById('fishDurationValue').textContent = fishSettings.minDuration;
+        document.getElementById('fishBuffer').value = fishSettings.buffer;
+        document.getElementById('fishBufferValue').textContent = fishSettings.buffer;
+    }
+    
+    saveSilenceSettings() {
+        // Get current values from UI
+        this.silenceSettings.elevenlabs.removeSilence = document.getElementById('elevenLabsRemoveSilence').checked;
+        this.silenceSettings.elevenlabs.threshold = parseInt(document.getElementById('elevenLabsThreshold').value);
+        this.silenceSettings.elevenlabs.minDuration = parseInt(document.getElementById('elevenLabsDuration').value);
+        this.silenceSettings.elevenlabs.buffer = parseInt(document.getElementById('elevenLabsBuffer').value);
+        
+        this.silenceSettings.fish.removeSilence = document.getElementById('fishRemoveSilence').checked;
+        this.silenceSettings.fish.threshold = parseInt(document.getElementById('fishThreshold').value);
+        this.silenceSettings.fish.minDuration = parseInt(document.getElementById('fishDuration').value);
+        this.silenceSettings.fish.buffer = parseInt(document.getElementById('fishBuffer').value);
+        
+        // Update global checkbox
+        document.getElementById('removeSilence').checked = 
+            this.silenceSettings.elevenlabs.removeSilence || this.silenceSettings.fish.removeSilence;
+        
+        // Save to localStorage
+        try {
+            localStorage.setItem('silenceSettings', JSON.stringify(this.silenceSettings));
+            console.log('Saved silence settings:', this.silenceSettings);
+            
+            // Show feedback
+            const saveBtn = document.getElementById('saveSettingsBtn');
+            const originalText = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<i class="fas fa-check"></i> Saved!';
+            saveBtn.classList.add('btn-success');
+            
+            setTimeout(() => {
+                saveBtn.innerHTML = originalText;
+                saveBtn.classList.remove('btn-success');
+            }, 2000);
+            
+            // Close modal
+            this.closeModal();
+            
+        } catch (error) {
+            console.error('Error saving silence settings:', error);
+            alert('Failed to save settings');
+        }
+    }
+    
+    resetSilenceSettings() {
+        // Reset to defaults
+        this.silenceSettings = {
+            elevenlabs: {
+                removeSilence: true,
+                threshold: -40,
+                minDuration: 500,
+                buffer: 100
+            },
+            fish: {
+                removeSilence: true,
+                threshold: -40,
+                minDuration: 500,
+                buffer: 100
+            }
+        };
+        
+        // Update UI
+        this.updateSilenceSettingsUI();
+        
+        // Save to localStorage
+        localStorage.removeItem('silenceSettings');
+        console.log('Reset silence settings to defaults');
+        
+        // Show feedback
+        const resetBtn = document.getElementById('resetSettingsBtn');
+        const originalText = resetBtn.innerHTML;
+        resetBtn.innerHTML = '<i class="fas fa-check"></i> Reset!';
+        resetBtn.classList.add('btn-success');
+        
+        setTimeout(() => {
+            resetBtn.innerHTML = originalText;
+            resetBtn.classList.remove('btn-success');
+        }, 2000);
+    }
+    
+    // Modal functionality
+    openModal() {
+        const modal = document.getElementById('silenceSettingsModal');
+        modal.style.display = 'block';
+        
+        // Add event listener to close button
+        const closeBtn = modal.querySelector('.close-modal');
+        closeBtn.addEventListener('click', () => this.closeModal());
+        
+        // Close when clicking outside the modal
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                this.closeModal();
+            }
+        });
+    }
+    
+    closeModal() {
+        const modal = document.getElementById('silenceSettingsModal');
+        modal.style.display = 'none';
+    }
+    
+    // Initialize the interactive background animation
+    initBackgroundAnimation() {
+        const bgAnimation = document.getElementById('bgAnimation');
+        const particles = [];
+        const glows = [];
+        
+        // Determine animation complexity based on device performance and screen size
+        const isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const isSmallScreen = window.innerWidth < 768;
+        const isLowPerformance = isReducedMotion || isSmallScreen;
+        
+        // Set number of elements based on performance capability
+        const particleCount = isLowPerformance ? 3 : 7;
+        const glowCount = isLowPerformance ? 2 : 4;
+        
+        // Create particles
+        for (let i = 0; i < particleCount; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            
+            // Random size between 50px and 200px
+            const size = Math.floor(Math.random() * 150) + 50;
+            particle.style.width = `${size}px`;
+            particle.style.height = `${size}px`;
+            
+            // Random position
+            particle.style.left = `${Math.random() * 100}%`;
+            particle.style.top = `${Math.random() * 100}%`;
+            
+            // Random animation delay and duration
+            const duration = Math.random() * 10 + 15;
+            particle.style.animationDuration = `${duration}s`;
+            particle.style.animationDelay = `${Math.random() * 5}s`;
+            
+            // Store reference
+            particles.push(particle);
+            bgAnimation.appendChild(particle);
+        }
+        
+        // Create glow effects
+        for (let i = 0; i < glowCount; i++) {
+            const glow = document.createElement('div');
+            glow.className = 'glow';
+            
+            // Random size
+            const size = Math.floor(Math.random() * 200) + 200;
+            glow.style.width = `${size}px`;
+            glow.style.height = `${size}px`;
+            
+            // Random position
+            glow.style.left = `${Math.random() * 100}%`;
+            glow.style.top = `${Math.random() * 100}%`;
+            
+            // Random animation delay
+            glow.style.animationDelay = `${Math.random() * 3}s`;
+            
+            // Store reference
+            glows.push(glow);
+            bgAnimation.appendChild(glow);
+        }
+        
+        // Create a special glow that follows the mouse
+        const mouseGlow = document.createElement('div');
+        mouseGlow.className = 'mouse-glow';
+        bgAnimation.appendChild(mouseGlow);
+        
+        // Add mouse interaction effects
+        document.addEventListener('mousemove', (e) => {
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+            
+            // Move the mouse glow
+            mouseGlow.style.left = `${mouseX - 150}px`;
+            mouseGlow.style.top = `${mouseY - 150}px`;
+            
+            // Skip intensive particle interactions on low-performance devices
+            if (!isLowPerformance) {
+                // Subtle particle interaction
+                particles.forEach((particle, index) => {
+                    const particleRect = particle.getBoundingClientRect();
+                    const particleX = particleRect.left + particleRect.width / 2;
+                    const particleY = particleRect.top + particleRect.height / 2;
+                    
+                    const dx = mouseX - particleX;
+                    const dy = mouseY - particleY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // If mouse is close to particle, add a subtle transform
+                    if (distance < 300) {
+                        const angle = Math.atan2(dy, dx);
+                        const push = 1 - distance / 300; // Closer = stronger push
+                        const moveX = Math.cos(angle) * push * -20;
+                        const moveY = Math.sin(angle) * push * -20;
+                        
+                        particle.style.transform = `translate(${moveX}px, ${moveY}px) scale(${1 + push * 0.2})`;
+                    } else {
+                        particle.style.transform = '';
+                    }
+                });
+            }
+        });
+        
+        // Add click effect
+        document.addEventListener('click', (e) => {
+            // Skip ripple effect on low-performance devices
+            if (isLowPerformance) return;
+            
+            const clickX = e.clientX;
+            const clickY = e.clientY;
+            
+            // Create ripple effect
+            const ripple = document.createElement('div');
+            ripple.className = 'ripple';
+            ripple.style.left = `${clickX - 50}px`;
+            ripple.style.top = `${clickY - 50}px`;
+            bgAnimation.appendChild(ripple);
+            
+            // Remove after animation completes
+            setTimeout(() => {
+                ripple.remove();
+            }, 1000);
+        });
+        
+        // Add resize handler to adjust animation complexity on window resize
+        window.addEventListener('resize', this.debounce(() => {
+            // Remove all existing elements
+            while (bgAnimation.firstChild) {
+                bgAnimation.removeChild(bgAnimation.firstChild);
+            }
+            
+            // Reinitialize with new screen size
+            this.initBackgroundAnimation();
+        }, 250));
+    }
+    
+    // Helper function for debouncing resize events
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    // Load knowledge base statistics
+    async loadKnowledgeStats() {
+        try {
+            const response = await fetch('/knowledge-stats');
+            const data = await response.json();
+            
+            if (data.success) {
+                this.knowledgeStats = data.knowledge_base;
+                this.updateKnowledgeDisplay();
+            }
+        } catch (error) {
+            console.error('Error loading knowledge stats:', error);
+            // Add error status to action buttons
+            const stepSections = document.querySelectorAll('.step-section .action-buttons');
+            stepSections.forEach(section => {
+                const toolStatus = document.createElement('div');
+                toolStatus.className = 'tool-status';
+                toolStatus.innerHTML = `<i class="fas fa-exclamation-triangle"></i>Tool ready (knowledge base unavailable)`;
+                section.appendChild(toolStatus);
+            });
+        }
+    }
+
+    updateKnowledgeDisplay() {
+        // Add subtle tool status indicators to each step section
+        const stepSections = document.querySelectorAll('.step-section .action-buttons');
+        
+        if (this.knowledgeStats) {
+            stepSections.forEach(section => {
+                // Remove any existing tool status
+                const existingStatus = section.querySelector('.tool-status');
+                if (existingStatus) {
+                    existingStatus.remove();
+                }
+                
+                // Create new tool status element
+                const toolStatus = document.createElement('div');
+                toolStatus.className = 'tool-status';
+                toolStatus.innerHTML = `<i class="fas fa-bolt"></i>Ready to generate`;
+                
+                // Add to the section
+                section.appendChild(toolStatus);
+            });
+        }
+    }
+    
+    setupEventListeners() {
+        // Navigation menu
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                const step = parseInt(e.target.dataset.step);
+                this.goToStep(step);
+            });
+        });
+        
+        // Generate story button
+        document.getElementById('generateStoryBtn').addEventListener('click', () => this.generateStory());
+        
+        // Step navigation buttons
+        document.getElementById('backToPromptBtn').addEventListener('click', () => this.goToStep(1));
+        document.getElementById('saveStoryBtn').addEventListener('click', () => this.saveStory());
+        document.getElementById('goToVoiceoverBtn').addEventListener('click', () => this.goToVoiceover());
+        document.getElementById('backToStoryBtn')?.addEventListener('click', () => this.goToStep(2));
+        document.getElementById('proceedToVoiceoverBtn')?.addEventListener('click', () => this.goToStep(3));
+        document.getElementById('generateElevenLabsBtn').addEventListener('click', () => this.generateVoiceover('elevenlabs'));
+        document.getElementById('generateFishAudioBtn').addEventListener('click', () => this.generateVoiceover('fish'));
+        document.getElementById('generateBothBtn').addEventListener('click', () => this.generateVoiceover('both'));
+        document.getElementById('startOverBtn').addEventListener('click', () => this.startOver());
+
+        // Editor functionality
+        document.getElementById('storyEditor').addEventListener('input', (e) => this.onStoryEdit(e));
+        document.getElementById('undoBtn')?.addEventListener('click', () => this.undo());
+        document.getElementById('redoBtn')?.addEventListener('click', () => this.redo());
+        document.getElementById('resetBtn')?.addEventListener('click', () => this.resetStory());
+        document.getElementById('copyBtn')?.addEventListener('click', () => this.copyToClipboard());
+
+        // Download functionality
+        document.getElementById('downloadStoryBtn').addEventListener('click', () => this.downloadStory());
+        document.getElementById('downloadAudioBtn')?.addEventListener('click', () => this.downloadAudio());
+        
+        // Silence settings functionality
+        document.getElementById('silenceSettingsBtn')?.addEventListener('click', () => this.openModal());
+        document.getElementById('saveSettingsBtn')?.addEventListener('click', () => this.saveSilenceSettings());
+        document.getElementById('resetSettingsBtn')?.addEventListener('click', () => this.resetSilenceSettings());
+        
+        // Global remove silence checkbox
+        document.getElementById('removeSilence')?.addEventListener('change', (e) => {
+            // Update both provider settings
+            const checked = e.target.checked;
+            this.silenceSettings.elevenlabs.removeSilence = checked;
+            this.silenceSettings.fish.removeSilence = checked;
+            
+            // Update checkboxes in modal
+            document.getElementById('elevenLabsRemoveSilence').checked = checked;
+            document.getElementById('fishRemoveSilence').checked = checked;
+        });
+        
+        // Sliders for ElevenLabs
+        document.getElementById('elevenLabsThreshold')?.addEventListener('input', (e) => {
+            document.getElementById('elevenLabsThresholdValue').textContent = e.target.value;
+        });
+        document.getElementById('elevenLabsDuration')?.addEventListener('input', (e) => {
+            document.getElementById('elevenLabsDurationValue').textContent = e.target.value;
+        });
+        document.getElementById('elevenLabsBuffer')?.addEventListener('input', (e) => {
+            document.getElementById('elevenLabsBufferValue').textContent = e.target.value;
+        });
+        
+        // Sliders for Fish Audio
+        document.getElementById('fishThreshold')?.addEventListener('input', (e) => {
+            document.getElementById('fishThresholdValue').textContent = e.target.value;
+        });
+        document.getElementById('fishDuration')?.addEventListener('input', (e) => {
+            document.getElementById('fishDurationValue').textContent = e.target.value;
+        });
+        document.getElementById('fishBuffer')?.addEventListener('input', (e) => {
+            document.getElementById('fishBufferValue').textContent = e.target.value;
+        });
+    }
+
+    setupCharacterCounters() {
+        const promptTextarea = document.getElementById('storyPrompt');
+        const promptCounter = document.getElementById('promptCharCount');
+        
+        promptTextarea.addEventListener('input', () => {
+            promptCounter.textContent = promptTextarea.value.length;
+        });
+    }
+
+    setupEditHistory() {
+        this.editHistory = [];
+        this.editIndex = -1;
+    }
+
+    addToEditHistory(content) {
+        // Remove any future history when adding new content
+        this.editHistory = this.editHistory.slice(0, this.editIndex + 1);
+        this.editHistory.push(content);
+        this.editIndex++;
+        
+        // Limit history to 50 entries
+        if (this.editHistory.length > 50) {
+            this.editHistory.shift();
+            this.editIndex--;
+        }
+        
+        this.updateEditButtons();
+    }
+
+    updateEditButtons() {
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+        
+        undoBtn.disabled = this.editIndex <= 0;
+        redoBtn.disabled = this.editIndex >= this.editHistory.length - 1;
+    }
+
+    undo() {
+        if (this.editIndex > 0) {
+            this.editIndex--;
+            const content = this.editHistory[this.editIndex];
+            document.getElementById('storyEditor').value = content;
+            this.updateStoryMeta(content);
+            this.updateEditButtons();
+        }
+    }
+
+    redo() {
+        if (this.editIndex < this.editHistory.length - 1) {
+            this.editIndex++;
+            const content = this.editHistory[this.editIndex];
+            document.getElementById('storyEditor').value = content;
+            this.updateStoryMeta(content);
+            this.updateEditButtons();
+        }
+    }
+
+    resetStory() {
+        const editor = document.getElementById('storyEditor');
+        editor.value = this.originalStory;
+        this.addToEditHistory(this.originalStory);
+        this.updateStoryMeta(this.originalStory);
+    }
+
+    onStoryEdit(e) {
+        const content = e.target.value;
+        this.editedStory = content;
+        this.updateStoryMeta(content);
+        
+        // Add to history on pause (debounced)
+        clearTimeout(this.editTimeout);
+        this.editTimeout = setTimeout(() => {
+            this.addToEditHistory(content);
+        }, 1000);
+    }
+
+    updateStoryMeta(content) {
+        const words = content.trim().split(/\s+/).filter(word => word.length > 0);
+        const wordCount = words.length;
+        const charCount = content.length;
+        const readTime = Math.ceil(wordCount / 200); // 200 words per minute
+        const audioTime = Math.ceil(wordCount / 150); // 150 words per minute for audio
+        
+        // Update word count with character limit warning
+        let wordCountText = `${wordCount.toLocaleString()} words`;
+        if (charCount > 4000) {
+            wordCountText += ` (${charCount.toLocaleString()} chars - exceeds ElevenLabs limit)`;
+        } else {
+            wordCountText += ` (${charCount.toLocaleString()} chars)`;
+        }
+        
+        document.getElementById('storyWordCount').textContent = wordCountText;
+        document.getElementById('storyReadTime').textContent = `${readTime} min read`;
+        document.getElementById('storyAudioTime').textContent = `~${audioTime} min audio`;
+        
+        // Add visual indicator for character limit
+        const storyWordCountEl = document.getElementById('storyWordCount');
+        if (charCount > 4000) {
+            storyWordCountEl.style.color = '#f56565';
+        } else {
+            storyWordCountEl.style.color = '#4a5568';
+        }
+    }
+
+    goToStep(step) {
+        // Validate step number
+        if (step < 1 || step > 4) {
+            console.error('Invalid step number:', step);
+            return;
+        }
+        
+        const currentSection = document.getElementById(`step${this.currentStep}`);
+        const targetSection = document.getElementById(`step${step}`);
+        
+        if (!targetSection) {
+            console.error('Target section not found for step:', step);
+            return;
+        }
+        
+        // Update navigation menu active state
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.classList.remove('active');
+            if (parseInt(link.dataset.step) === step) {
+                link.classList.add('active');
+            }
+        });
+        
+        if (currentSection) {
+            // Add fade out animation
+            currentSection.classList.add('fade-out');
+            
+            setTimeout(() => {
+                // Hide all steps
+                document.querySelectorAll('.step-section').forEach(section => {
+                    section.classList.remove('active', 'fade-out');
+                });
+                
+                // Show target step
+                targetSection.classList.add('active');
+                this.currentStep = step;
+                
+                // Scroll to top with smooth animation
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }, 300);
+        } else {
+            // Direct transition for initial load
+            document.querySelectorAll('.step-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            targetSection.classList.add('active');
+            this.currentStep = step;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }
+
+    async generateStory() {
+        if (this.isGenerating) {
+            this.showNotification('Generation already in progress. Please wait for completion.');
+            return;
+        }
+
+        const prompt = document.getElementById('storyPrompt').value.trim();
+        
+        if (!prompt) {
+            this.showNotification('Please enter a story prompt first.');
+            return;
+        }
+        
+        this.isGenerating = true;
+        this.showLoading('Generating Story', 'Creating your story with Claude AI and RAG knowledge base...');
+        
+        try {
+            const response = await fetch('/expand-story', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ story_prompt: prompt })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success && data.expanded_story) {
+                this.originalStory = data.expanded_story;
+                document.getElementById('storyEditor').value = data.expanded_story;
+                this.updateStoryMeta(data.expanded_story);
+                
+                // Add to edit history
+                this.addToEditHistory(data.expanded_story);
+                
+                this.hideLoading();
+                setTimeout(() => {
+                    this.goToStep(2);
+                }, 200);
+            } else {
+                throw new Error(data.error || 'Failed to generate story');
+            }
+        } catch (error) {
+            console.error('Error generating story:', error);
+            this.hideLoading();
+            alert('Error generating story: ' + error.message);
+        } finally {
+            this.isGenerating = false;
+        }
+    }
+    
+    undo() {
+        if (this.editIndex > 0) {
+            this.editIndex--;
+            const content = this.editHistory[this.editIndex];
+            document.getElementById('storyEditor').value = content;
+            this.updateStoryMeta(content);
+            this.updateEditButtons();
+        }
+    }
+    
+    redo() {
+        if (this.editIndex < this.editHistory.length - 1) {
+            this.editIndex++;
+            const content = this.editHistory[this.editIndex];
+            document.getElementById('storyEditor').value = content;
+            this.updateStoryMeta(content);
+            this.updateEditButtons();
+        }
+    }
+                // This code is redundant as it's already handled in the generateStory method above
+            } else {
+                throw new Error(data.error || 'Failed to generate story');
+            }
+        } catch (error) {
+            console.error('Error generating story:', error);
+            this.hideLoading();
+            alert('Error generating story: ' + error.message);
+        } finally {
+            this.isGenerating = false;
+        }
+    }
+    
+    saveStory() {
+        const story = document.getElementById('storyEditor').value.trim();
+        
+        // Check if there's content in the story
+        if (!story) {
+            this.showNotification('Please enter or generate a story before saving.');
+            return;
+        }
+        
+        // Add to edit history
+        this.addToEditHistory(story);
+        
+        // Save the story with timestamp for auto-deletion
+        this.saveStoryWithExpiration(story);
+        
+        // Show feedback to the user
+        const saveBtn = document.getElementById('saveStoryBtn');
+        const originalText = saveBtn.innerHTML;
+        saveBtn.innerHTML = '<i class="fas fa-check"></i> Saved!';
+        
+        setTimeout(() => {
+            saveBtn.innerHTML = originalText;
+        }, 1500);
+    }
+    
+    async saveStoryWithExpiration(story) {
+        // Create a story object with content for API
+        const storyData = {
+            content: story
+        };
+        
+        try {
+            // Save to server API
+            const serverSaved = await this.saveStoryToServer(storyData);
+            
+            // If server save was successful, store the ID locally
+            if (serverSaved && serverSaved.storyId) {
+                localStorage.setItem('storyId', serverSaved.storyId);
+                
+                // Also save locally as backup with expiration
+                const localStoryData = {
+                    content: story,
+                    timestamp: Date.now(),
+                    expiresAt: serverSaved.expiresAt || (Date.now() + (48 * 60 * 60 * 1000)), // 48 hours in milliseconds
+                    storyId: serverSaved.storyId
+                };
+                localStorage.setItem('savedStory', JSON.stringify(localStoryData));
+            } else {
+                // Fallback to local storage only if server save failed
+                const localStoryData = {
+                    content: story,
+                    timestamp: Date.now(),
+                    expiresAt: Date.now() + (48 * 60 * 60 * 1000) // 48 hours in milliseconds
+                };
+                localStorage.setItem('savedStory', JSON.stringify(localStoryData));
+            }
+            
+            // Clean up expired stories
+            this.cleanupExpiredStories();
+            
+        } catch (error) {
+            console.error('Error saving story:', error);
+            // Fallback to local storage only
+            const localStoryData = {
+                content: story,
+                timestamp: Date.now(),
+                expiresAt: Date.now() + (48 * 60 * 60 * 1000) // 48 hours in milliseconds
+            };
+            localStorage.setItem('savedStory', JSON.stringify(localStoryData));
+        }
+    }
+    
+    async saveStoryToServer(storyData) {
+        try {
+            // Only attempt to save if we're in an online environment
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                console.log('Development environment detected, using local storage only');
+                return null;
+            }
+            
+            // Check if the story content is too large (over 40MB to be safe)
+            // Most APIs have a limit around 50MB, we'll stay well under that
+            const MAX_PAYLOAD_SIZE = 40 * 1024 * 1024; // 40MB in bytes
+            const storyContentSize = new TextEncoder().encode(JSON.stringify(storyData)).length;
+            
+            console.log(`Story size: ${(storyContentSize / (1024 * 1024)).toFixed(2)}MB`);
+            
+            if (storyContentSize > MAX_PAYLOAD_SIZE) {
+                console.log('Story is too large, using chunked saving');
+                return await this.saveStoryInChunks(storyData);
+            }
+            
+            // For normal sized stories, save directly
+            const response = await fetch('/api/stories', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(storyData)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            console.log('Story saved to server:', result);
+            return result;
+        } catch (error) {
+            console.error('Failed to save story to server:', error);
+            return null;
+        }
+    }
+    
+    async saveStoryInChunks(storyData) {
+        try {
+            // Split the story content into smaller chunks
+            const content = storyData.content;
+            const CHUNK_SIZE = 20 * 1024 * 1024; // 20MB per chunk (in characters)
+            
+            // Create a temporary story with just the first chunk to get an ID
+            const firstChunkData = {
+                content: content.substring(0, CHUNK_SIZE),
+                isFirstChunk: true,
+                totalChunks: Math.ceil(content.length / CHUNK_SIZE)
+            };
+            
+            // Save the first chunk and get the story ID
+            const response = await fetch('/api/stories', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(firstChunkData)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            const storyId = result.storyId;
+            
+            // If there are more chunks, append them to the existing story
+            if (content.length > CHUNK_SIZE) {
+                for (let i = 1; i < Math.ceil(content.length / CHUNK_SIZE); i++) {
+                    const start = i * CHUNK_SIZE;
+                    const end = Math.min((i + 1) * CHUNK_SIZE, content.length);
+                    const chunkData = {
+                        content: content.substring(start, end),
+                        storyId: storyId,
+                        chunkIndex: i,
+                        isLastChunk: end === content.length
+                    };
+                    
+                    // Append this chunk to the existing story
+                    const appendResponse = await fetch('/api/stories/append', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(chunkData)
+                    });
+                    
+                    if (!appendResponse.ok) {
+                        throw new Error(`Failed to append chunk ${i}: ${appendResponse.status}`);
+                    }
+                    
+                    console.log(`Chunk ${i+1}/${Math.ceil(content.length / CHUNK_SIZE)} saved`);
+                }
+            }
+            
+            console.log('All story chunks saved successfully');
+            return result;
+        } catch (error) {
+            console.error('Failed to save story in chunks:', error);
+            return null;
+        }
+    }
+    
+    cleanupExpiredStories() {
+        // Check localStorage for expired stories
+        const savedStory = localStorage.getItem('savedStory');
+        
+        if (savedStory) {
+            try {
+                const storyData = JSON.parse(savedStory);
+                
+                // Check if story has expired
+                if (storyData.expiresAt && storyData.expiresAt < Date.now()) {
+                    // Story has expired, remove it from localStorage
+                    localStorage.removeItem('savedStory');
+                    localStorage.removeItem('storyId');
+                    console.log('Expired story removed from local storage');
+                    
+                    // If we have a storyId, also try to delete from server
+                    if (storyData.storyId) {
+                        this.deleteStoryFromServer(storyData.storyId).catch(err => {
+                            console.error('Failed to delete expired story from server:', err);
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error parsing saved story:', error);
+                // If there's an error parsing, remove the corrupted data
+                localStorage.removeItem('savedStory');
+                localStorage.removeItem('storyId');
+            }
+        }
+    }
+    
+    async deleteStoryFromServer(storyId) {
+        try {
+            // Only attempt to delete if we're in an online environment
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                return;
+            }
+            
+            // Call the Vercel API endpoint to delete the story
+            const response = await fetch(`/api/stories?id=${storyId}`, {
+                method: 'DELETE'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+            
+            console.log('Story deleted from server');
+        } catch (error) {
+            console.error('Failed to delete story from server:', error);
+            throw error;
+        }
+    }
+    
+    goToVoiceover() {
+        const story = document.getElementById('storyEditor').value.trim();
+        
+        // Check if there's content in the story
+        if (!story) {
+            this.showNotification('Please enter or generate a story before proceeding to voiceover generation.');
+            return;
+        }
+        
+        // Navigate to voiceover step
+        this.goToStep(3);
+    }
+    
+    async generateVoiceover(providerParam) {
+        if (this.isGenerating) {
+            this.showNotification('Generation already in progress. Please wait for completion.');
+            return;
+        }
+
+        const story = document.getElementById('storyEditor').value.trim();
+        const removeSilence = document.getElementById('removeSilence').checked;
+        // Use the provider passed from the button click
+        const provider = providerParam;
+        
+        // Check if there's content in the story
+        if (!story) {
+            this.showNotification('Please enter or generate a story before generating a voiceover.');
+            return;
+        }
+        
+        // Warning and handling for ElevenLabs character limit
+        if ((provider === 'elevenlabs' || provider === 'both') && story.length > 4000) {
+            const storyForElevenLabs = story.substring(0, 4000);
+            const remainingChars = story.length - 4000;
+            
+            const shouldContinue = confirm(
+                `Warning: Your story has ${story.length.toLocaleString()} characters, but ElevenLabs can only process 4,000 characters.\n\n` +
+                `Only the first 4,000 characters will be processed for ElevenLabs.\n\n` +
+                (provider === 'elevenlabs' ? 
+                    `Consider using Fish Audio or Both providers for the complete story.\n\n` : 
+                    `Fish Audio will process the complete story.\n\n`) +
+                `Continue?`
+            );
+            
+            if (!shouldContinue) {
+                this.isGenerating = false;
+                return;
+            }
+        }
+        
+        try {
+            if (provider === 'both') {
+                await this.generateBothAudio(story, removeSilence);
+            } else {
+                await this.generateSingleAudio(story, provider, removeSilence);
+                this.completeLoading();
+            }
+            
+            this.displayResults(story, provider);
+            setTimeout(() => {
+                this.goToStep(4);
+            }, 200);
+        } catch (error) {
+            console.error('Error generating voiceover:', error);
+            this.hideLoading();
+            alert('Error generating voiceover: ' + error.message);
+        } finally {
+            this.isGenerating = false;
+        }
+    }
+
+    async generateSingleAudio(story, provider, removeSilence) {
+        let expectedDuration, displayName;
+        let processedStory = story;
+        
+        if (provider === 'elevenlabs') {
+            expectedDuration = '3 minutes';
+            displayName = 'ElevenLabs';
+            
+            // Handle ElevenLabs character limit
+            if (story.length > 4000) {
+                processedStory = story.substring(0, 4000);
+                console.log(`Story truncated to ${processedStory.length} characters for ElevenLabs`);
+            }
+        } else {
+            expectedDuration = '10 minutes';
+            displayName = 'Fish Audio';
+        }
+        
+        this.showLoading('Generating Voiceover', `Creating ${displayName} voiceover (${expectedDuration})...`);
+        
+        const result = await this.generateAudioForProvider(processedStory, provider, removeSilence);
+        
+        this.audioResults[provider] = {
+            blob: result.blob,
+            url: result.url,
+            duration: result.duration,
+            isComplete: provider === 'elevenlabs' ? processedStory.length === story.length : true
+        };
+    }
+
+    async generateBothAudio(story, removeSilence) {
+        this.showLoading('Generating Voiceovers', 'Creating both ElevenLabs and Fish Audio voiceovers...');
+        
+        // Handle ElevenLabs character limit
+        let elevenLabsStory = story;
+        if (story.length > 4000) {
+            elevenLabsStory = story.substring(0, 4000);
+            console.log(`Story truncated to ${elevenLabsStory.length} characters for ElevenLabs`);
+        }
+        
+        const promises = [
+            this.generateAudioForProvider(elevenLabsStory, 'elevenlabs', removeSilence),
+            this.generateAudioForProvider(story, 'fish', removeSilence)
+        ];
+
+        try {
+            const results = await Promise.allSettled(promises);
+            
+            // Process results
+            results.forEach((result, index) => {
+                const provider = index === 0 ? 'elevenlabs' : 'fish';
+                const displayName = index === 0 ? 'ElevenLabs' : 'Fish Audio';
+                
+                if (result.status === 'fulfilled') {
+                    this.audioResults[provider] = {
+                        blob: result.value.blob,
+                        url: result.value.url,
+                        duration: result.value.duration,
+                        isComplete: provider === 'elevenlabs' ? elevenLabsStory.length === story.length : true
+                    };
+                } else {
+                    console.error(`Error generating ${displayName} audio:`, result.reason);
+                    alert(`Error generating ${displayName} audio: ${result.reason.message || result.reason}`);
+                }
+            });
+            
+            this.completeLoading();
+            
+            // Complete the loading animation
+            setTimeout(() => {
+                this.completeLoading();
+            }, 1000);
+            
+        } catch (error) {
+            throw new Error('Failed to generate voiceovers: ' + error.message);
+        }
+    }
+
+    async generateAudioForProvider(story, provider, removeSilence) {
+        let endpoint, displayName, processedStory;
+        let silenceSettings;
+        
+        if (provider === 'elevenlabs') {
+            endpoint = '/generate-elevenlabs-binary';
+            displayName = 'ElevenLabs';
+            silenceSettings = this.silenceSettings.elevenlabs;
+            // Limit ElevenLabs to 4000 characters
+            processedStory = story.substring(0, 4000);
+            if (story.length > 4000) {
+                console.log(`ElevenLabs: Story truncated from ${story.length} to 4000 characters`);
+            }
+        } else {
+            endpoint = '/generate-fish-binary';
+            displayName = 'Fish Audio';
+            silenceSettings = this.silenceSettings.fish;
+            processedStory = story; // Fish Audio can handle full story
+        }
+        
+        // Use global checkbox as master control
+        const globalRemoveSilence = document.getElementById('removeSilence').checked;
+        const actualRemoveSilence = globalRemoveSilence && silenceSettings.removeSilence;
+        
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                story_prompt: processedStory,
+                elevenlabs_remove_silence: actualRemoveSilence,
+                remove_silence: actualRemoveSilence,
+                silence_threshold: silenceSettings.threshold,
+                min_silence_duration: silenceSettings.minDuration,
+                silence_buffer: silenceSettings.buffer
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to generate ${displayName} voiceover`);
+        }
+
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        // Calculate approximate duration based on word count
+        // Average speaking rate is about 150 words per minute
+        const wordCount = processedStory.split(/\s+/).length;
+        const estimatedDuration = (wordCount / 150) * 60; // in seconds
+        
+        return {
+            blob: audioBlob,
+            url: audioUrl,
+            duration: estimatedDuration,
+            charactersUsed: processedStory.length
+        };
+    }
+
+    displayResults(story, provider) {
+        // Display story preview
+        const storyPreview = document.getElementById('finalStoryPreview');
+        storyPreview.textContent = story;
+        
+        // Display audio results
+        const audioResults = document.getElementById('audioResults');
+        const downloadButtons = document.getElementById('downloadButtons');
+        
+        let audioHTML = '';
+        let downloadHTML = '';
+        
+        // Generate HTML for each audio result
+        Object.keys(this.audioResults).forEach(providerKey => {
+            const audio = this.audioResults[providerKey];
+            const providerClass = providerKey === 'elevenlabs' ? 'elevenlabs' : 'fish';
+            const providerName = providerKey === 'elevenlabs' ? 'ElevenLabs' : 'Fish Audio';
+            const providerIcon = providerKey === 'elevenlabs' ? 'EL' : 'FA';
+            
+            // Character limit warning for ElevenLabs
+            let characterInfo = '';
+            if (providerKey === 'elevenlabs') {
+                if (!audio.isComplete) {
+                    characterInfo = `
+                        <div class="character-limit-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Note:</strong> Only first 4,000 characters processed (story has ${story.length} characters)
+                        </div>
+                    `;
+                } else {
+                    characterInfo = `
+                        <div class="character-limit-success">
+                            <i class="fas fa-check-circle"></i>
+                            Complete story processed (${story.length} characters)
+                        </div>
+                    `;
+                }
+            } else {
+                characterInfo = `
+                    <div class="character-limit-success">
+                        <i class="fas fa-check-circle"></i>
+                        Full story processed (${story.length} characters)
+                    </div>
+                `;
+            }
+            
+            // Calculate audio duration in minutes and seconds
+            const duration = audio.duration || 0;
+            const minutes = Math.floor(duration / 60);
+            const seconds = Math.floor(duration % 60);
+            const durationText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            audioHTML += `
+                <div class="audio-section">
+                    <h4>
+                        <span class="provider-icon ${providerClass}">${providerIcon}</span>
+                        ${providerName}
+                    </h4>
+                    ${characterInfo}
+                    <div class="audio-player">
+                        <audio controls>
+                            <source src="${audio.url}" type="audio/mpeg">
+                            Your browser does not support the audio element.
+                        </audio>
+                    </div>
+                    <div class="audio-info">
+                        <div><strong>Duration:</strong> ${durationText}</div>
+                        <div><strong>Format:</strong> MP3</div>
+                        <div><strong>Quality:</strong> High</div>
+                    </div>
+                </div>
+            `;
+            
+            downloadHTML += `
+                <button class="btn btn-outline" onclick="app.downloadAudio('${providerKey}')">
+                    <i class="fas fa-download"></i>
+                    Download ${providerName}
+                </button>
+            `;
+        });
+        
+        audioResults.innerHTML = audioHTML;
+        downloadButtons.innerHTML = downloadHTML;
+        
+        // Add download story button
+        downloadButtons.innerHTML += `
+            <button class="btn btn-outline" onclick="app.downloadStory()">
+                <i class="fas fa-download"></i>
+                Download Story (.txt)
+            </button>
+        `;
+    }
+
+    downloadStory() {
+        const story = document.getElementById('storyEditor').value;
+        const blob = new Blob([story], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'story.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    
+    copyToClipboard() {
+        const storyText = document.getElementById('storyEditor').value;
+        if (!storyText) {
+            return;
+        }
+        
+        // Copy to clipboard
+        navigator.clipboard.writeText(storyText)
+            .then(() => {
+                // Show success feedback
+                const copyBtn = document.getElementById('copyBtn');
+                const originalIcon = copyBtn.innerHTML;
+                
+                // Change icon to checkmark to indicate success
+                copyBtn.innerHTML = '<i class="fas fa-check"></i>';
+                copyBtn.classList.add('copy-success');
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalIcon;
+                    copyBtn.classList.remove('copy-success');
+                }, 2000);
+            })
+            .catch(err => {
+                console.error('Failed to copy text: ', err);
+                alert('Failed to copy text to clipboard');
+            });
+    }
+
+    downloadAudio(providerKey) {
+        if (this.audioResults[providerKey]) {
+            const audio = this.audioResults[providerKey];
+            const a = document.createElement('a');
+            a.href = audio.url;
+            a.download = `voiceover_${audio.provider.toLowerCase().replace(' ', '_')}_${new Date().toISOString().split('T')[0]}.mp3`;
+            a.click();
+        }
+    }
+
+    startOver() {
+        // Reset all data
+        this.originalStory = '';
+        this.editedStory = '';
+        this.setupEditHistory();
+        this.isGenerating = false;
+        
+        // Clean up audio URLs
+        Object.keys(this.audioResults).forEach(providerKey => {
+            if (this.audioResults[providerKey].url) {
+                URL.revokeObjectURL(this.audioResults[providerKey].url);
+            }
+        });
+        this.audioResults = {};
+        
+        // Clear form inputs
+        document.getElementById('storyPrompt').value = '';
+        document.getElementById('storyEditor').value = '';
+        document.getElementById('promptCharCount').textContent = '0';
+        
+        // Reset to first step
+        this.goToStep(1);
+    }
+
+    showLoading(title, message, useBottomLoader = false) {
+        if (useBottomLoader) {
+            this.showBottomLoader();
+        } else {
+            const overlay = document.getElementById('loadingOverlay');
+            const titleEl = document.getElementById('loadingTitle');
+            const messageEl = document.getElementById('loadingMessage');
+            const progressEl = document.getElementById('progressFill');
+            
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            progressEl.style.width = '0%';
+            
+            overlay.classList.add('active');
+            
+            // Animate progress bar with smooth curve
+            setTimeout(() => {
+                progressEl.style.width = '30%';
+                setTimeout(() => {
+                    progressEl.style.width = '70%';
+                    setTimeout(() => {
+                        progressEl.style.width = '90%';
+                    }, 1500);
+                }, 1000);
+            }, 300);
+        }
+    }
+
+    showBottomLoader() {
+        const bottomLoader = document.getElementById('bottomLoader');
+        const bottomLoaderFill = document.getElementById('bottomLoaderFill');
+        
+        bottomLoader.classList.add('active');
+        
+        // Animate bottom loader
+        setTimeout(() => {
+            bottomLoaderFill.style.width = '30%';
+            setTimeout(() => {
+                bottomLoaderFill.style.width = '60%';
+                setTimeout(() => {
+                    bottomLoaderFill.style.width = '85%';
+                }, 1000);
+            }, 500);
+        }, 100);
+    }
+
+    hideLoading() {
+        const overlay = document.getElementById('loadingOverlay');
+        const bottomLoader = document.getElementById('bottomLoader');
+        const bottomLoaderFill = document.getElementById('bottomLoaderFill');
+        
+        overlay.classList.remove('active');
+        bottomLoader.classList.remove('active');
+        bottomLoaderFill.style.width = '0%';
+    }
+
+    completeLoading() {
+        const progressEl = document.getElementById('progressFill');
+        const bottomLoaderFill = document.getElementById('bottomLoaderFill');
+        
+        // Complete the progress bars
+        progressEl.style.width = '100%';
+        bottomLoaderFill.style.width = '100%';
+        
+        // Hide after completion animation
+        setTimeout(() => {
+            this.hideLoading();
+        }, 500);
+    }
+
+    updateLoadingMessage(message) {
+        const messageEl = document.getElementById('loadingMessage');
+        if (messageEl) {
+            messageEl.textContent = message;
+        }
+    }
+}
+
+// Initialize the application when DOM is loaded
+let app;
+document.addEventListener('DOMContentLoaded', () => {
+    app = new StoryForgeGUI();
+});
+
+// Handle errors gracefully
+window.addEventListener('error', (e) => {
+    console.error('Application error:', e.error);
+});
+
+// Handle unhandled promise rejections
+window.addEventListener('unhandledrejection', (e) => {
+    console.error('Unhandled promise rejection:', e.reason);
+    e.preventDefault();
+});
