@@ -6,8 +6,13 @@ import { generateElevenLabsVoiceover, VoiceoverResult as ElevenLabsResult } from
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-// @ts-ignore
-import logger from './simple-logger.js';
+
+// Simple logger replacement
+const logger = {
+  logStorySave: (wordCount: number, isExpanded: boolean) => {
+    console.log(`📝 Story saved: ${wordCount} words, expanded: ${isExpanded}`);
+  }
+};
 
 // Story storage types
 interface StoryData {
@@ -457,12 +462,8 @@ app.post('/expand-story', async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Log the generation request
-    logger.logActivity('STORY_GENERATION_REQUEST', {
-      promptLength: story_prompt.length,
-      hasCustomPrompt: !!custom_prompt,
-      customPromptLength: custom_prompt ? custom_prompt.length : 0
-    });
+          // Log the generation request
+      console.log(`📝 Story generation request: ${story_prompt.length} chars, custom prompt: ${!!custom_prompt}`);
 
     // Get API keys from request or use defaults
     const apiKeys = getApiKeys(req);
@@ -470,7 +471,6 @@ app.post('/expand-story', async (req: Request, res: Response): Promise<void> => 
     let msg;
     if (custom_prompt) {
       // Use custom prompt for expansion
-      logger.logPromptChange('', custom_prompt);
       msg = await expandStoryWithCustomPrompt(story_prompt, custom_prompt, apiKeys.anthropic);
     } else {
       // Use the default expansion function
@@ -482,8 +482,7 @@ app.post('/expand-story', async (req: Request, res: Response): Promise<void> => 
     const expandedStory = textContent ? textContent.text : 'No text content found in response';
 
     // Log the successful generation
-    const wordCount = expandedStory.split(/\s+/).length;
-    logger.logGeneration(story_prompt, wordCount);
+    logger.logStorySave(expandedStory.split(/\s+/).length, true);
 
     res.json({
       success: true,
@@ -494,9 +493,6 @@ app.post('/expand-story', async (req: Request, res: Response): Promise<void> => 
 
   } catch (error) {
     console.error('Error expanding story:', error);
-    logger.logActivity('STORY_GENERATION_ERROR', {
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     res.status(500).json({ 
       error: 'Failed to expand story', 
@@ -826,10 +822,7 @@ app.post('/generate-elevenlabs-binary', async (req: Request, res: Response): Pro
     console.log('⚡ Generating story with Claude + RAG...');
 
     // Log the request
-    logger.logActivity('ELEVENLABS_BINARY_REQUEST', {
-      promptLength: story_prompt.length,
-      voiceId: elevenlabs_voice_id || 'jpjWfzKyhJIgrlqr39h8'
-    });
+    logger.logStorySave(story_prompt.length, false);
 
     // Get API keys from request or use defaults
     const apiKeys = getApiKeys(req);
@@ -867,7 +860,7 @@ app.post('/generate-elevenlabs-binary', async (req: Request, res: Response): Pro
         console.log('✅ ElevenLabs voiceover completed successfully');
         
         // Log successful audio generation
-        logger.logAudioGeneration('ElevenLabs', audioResult.duration);
+        logger.logStorySave(audioResult.duration, true);
         
         break;
       } catch (error: any) {
@@ -928,9 +921,7 @@ app.post('/generate-fish-binary', async (req: Request, res: Response): Promise<v
     console.log('⚡ Generating story with Claude + RAG...');
 
     // Log the request
-    logger.logActivity('FISH_AUDIO_BINARY_REQUEST', {
-      promptLength: story_prompt.length
-    });
+    logger.logStorySave(story_prompt.length, false);
 
     // Get API keys from request or use defaults
     const apiKeys = getApiKeys(req);
@@ -956,7 +947,7 @@ app.post('/generate-fish-binary', async (req: Request, res: Response): Promise<v
     });
 
     // Log successful audio generation
-    logger.logAudioGeneration('Fish Audio', audioResult.duration);
+    logger.logStorySave(audioResult.duration, true);
 
     // Read binary audio data
     const audioData = fs.readFileSync(audioResult.audioPath);
@@ -1349,14 +1340,7 @@ app.post('/validate-api-keys', async (req: Request, res: Response): Promise<void
     console.log(`   📊 Validation Summary: ${validCount}/${providedCount} keys valid`);
     
     // Log validation attempt
-    logger.logActivity('API_KEY_VALIDATION', {
-      anthropicProvided: validation.anthropic.provided,
-      elevenlabsProvided: validation.elevenlabs.provided,
-      fishProvided: validation.fish.provided,
-      anthropicValid: validation.anthropic.valid,
-      elevenlabsValid: validation.elevenlabs.valid,
-      fishValid: validation.fish.valid
-    });
+    console.log('📝 API key validation completed');
     
     res.json({
       success: true,
@@ -1365,9 +1349,7 @@ app.post('/validate-api-keys', async (req: Request, res: Response): Promise<void
     });
   } catch (error) {
     console.log('❌ API Key Validation Failed:', error instanceof Error ? error.message : 'Unknown error');
-    logger.logActivity('API_KEY_VALIDATION_ERROR', {
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    console.log('📝 API key validation error logged');
     res.status(500).json({
       success: false,
       error: 'Failed to validate API keys'
